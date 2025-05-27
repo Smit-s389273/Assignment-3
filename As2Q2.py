@@ -1,0 +1,309 @@
+import pygame
+import random
+
+pygame.init()
+
+# --- Display ---
+screen_width = 800
+screen_height = 600
+screen = pygame.display.set_mode((screen_width, screen_height))
+pygame.display.set_caption("Human Hero Game")
+
+# --- Colors ---
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+BLUE = (0, 0, 255)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+YELLOW = (255, 255, 0)
+
+# --- Player Class ---
+class Player(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((50, 50))  # Placeholder
+        self.image.fill(BLUE)
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.speed_x = 0
+        self.speed_y = 0
+        self.health = 100
+        self.lives = 3
+        self.is_jumping = False
+        self.gravity = 0.8
+        self.jump_strength = -20  # Corrected jump strength
+
+    def update(self):
+        self.handle_input()
+        self.apply_gravity()
+        self.rect.x += self.speed_x
+        self.rect.y += self.speed_y
+
+    def handle_input(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            self.speed_x = -5
+        elif keys[pygame.K_RIGHT]:
+            self.speed_x = 5
+        else:
+            self.speed_x = 0
+        if keys[pygame.K_SPACE] and not self.is_jumping:
+            self.is_jumping = True
+            self.speed_y = self.jump_strength
+        if keys[pygame.K_LCTRL]:
+            self.shoot()
+
+    def apply_gravity(self):
+        self.speed_y += self.gravity
+        if self.rect.bottom > screen_height:
+            self.rect.bottom = screen_height
+            self.speed_y = 0
+            self.is_jumping = False
+
+    def shoot(self):
+        projectile = Projectile(self.rect.centerx, self.rect.centery)
+        all_sprites.add(projectile)
+        projectiles.add(projectile)
+
+# --- Projectile Class ---
+class Projectile(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((10, 10))  # Placeholder
+        self.image.fill(YELLOW)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.speed_x = 10
+        self.damage = 20
+
+    def update(self):
+        self.rect.x += self.speed_x
+        if self.rect.left > screen_width:
+            self.kill()
+
+# --- Enemy Class ---
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.Surface((40, 40))  # Placeholder
+        self.image.fill(RED)
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.speed_x = -2
+        self.health = 30
+
+    def update(self):
+        self.rect.x += self.speed_x
+        if self.rect.right < 0:
+            self.kill()
+
+# --- Boss Class (inherits from Enemy) ---
+class Boss(Enemy):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.image = pygame.Surface((80, 80))  # Placeholder
+        self.image.fill(WHITE)
+        self.health = 100
+        self.speed_x = -1
+
+# --- Collectible Class ---
+class Collectible(pygame.sprite.Sprite):
+    def __init__(self, x, y, type):
+        super().__init__()
+        self.image = pygame.Surface((20, 20))  # Placeholder
+        self.image.fill(GREEN)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.type = type
+
+    def update(self):
+        pass
+
+# --- Sprite Groups ---
+all_sprites = pygame.sprite.Group()
+player = Player(100, 500)
+all_sprites.add(player)
+projectiles = pygame.sprite.Group()
+enemies = pygame.sprite.Group()
+collectibles = pygame.sprite.Group()
+
+# --- Level Data ---
+def load_level(level_number):
+    global player
+    all_sprites.empty()
+    enemies.empty()
+    collectibles.empty()
+    player = Player(100, 500)
+    all_sprites.add(player)
+
+    if level_number == 1:
+        for i in range(5):
+            enemy = Enemy(800 + i * 150, 500)
+            all_sprites.add(enemy)
+            enemies.add(enemy)
+        collectible = Collectible(1000, 400, "health")
+        all_sprites.add(collectible)
+        collectibles.add(collectible)
+        collectible2 = Collectible(1200, 400, "score_boost")
+        all_sprites.add(collectible2)
+        collectibles.add(collectible2)
+    elif level_number == 2:
+        for i in range(4):
+            enemy = Enemy(800 + i * 200, 450)
+            all_sprites.add(enemy)
+            enemies.add(enemy)
+        collectible = Collectible(1100, 300, "extra_life")
+        all_sprites.add(collectible)
+        collectibles.add(collectible)
+    elif level_number == 3:
+        for i in range(3):
+            enemy = Enemy(800 + i * 200, 300)
+            all_sprites.add(enemy)
+            enemies.add(enemy)
+        boss = Boss(1200, 350)
+        all_sprites.add(boss)
+        enemies.add(boss)
+        collectible = Collectible(1300, 400, "health")
+        all_sprites.add(collectible)
+        collectibles.add(collectible)
+
+# --- Collision Detection ---
+def check_collisions():
+    global score, current_level, game_over
+
+    # Projectile hits enemy
+    for projectile in projectiles:
+        enemies_hit = pygame.sprite.spritecollide(projectile, enemies, False)
+        for enemy in enemies_hit:
+            enemy.health -= projectile.damage
+            projectile.kill()
+            print("Enemy Hit!")
+            if enemy.health <= 0:
+                enemy.kill()
+                score += 10
+
+    # Player hits enemy
+    if pygame.sprite.spritecollide(player, enemies, False):
+        player.health -= 10
+        print(f"Player Health: {player.health}")
+        if player.health <= 0:
+            player.lives -= 1
+            player.health = 100
+            print(f"Player Lives: {player.lives}")
+            if player.lives <= 0:
+                print("Game Over")
+                game_over = True
+
+    # Player hits collectible
+    collectible_hit = pygame.sprite.spritecollideany(player, collectibles)
+    if collectible_hit:
+        collectible_hit.kill()
+        if collectible_hit.type == "health":
+            player.health += 25
+            if player.health > 100:
+                player.health = 100
+            print("Health Collected!")
+        elif collectible_hit.type == "extra_life":
+            player.lives += 1
+            print("Extra Life Collected!")
+        elif collectible_hit.type == "score_boost":
+            score += 50
+            print("Score Boost Collected!")
+
+# --- Draw HUD ---
+font = pygame.font.Font(None, 36)
+
+def draw_hud():
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    screen.blit(score_text, (10, 10))
+    health_text = font.render(f"Health: {player.health}", True, WHITE)
+    screen.blit(health_text, (10, 40))
+    lives_text = font.render(f"Lives: {player.lives}", True, WHITE)
+    screen.blit(lives_text, (10, 70))
+    level_text = font.render(f"Level: {current_level}", True, WHITE)
+    screen.blit(level_text, (10, 100))
+
+def draw_enemy_health(surf, x, y, health, max_health):
+    BAR_LENGTH = 40
+    BAR_HEIGHT = 5
+    fill = (health / max_health) * BAR_LENGTH
+    outline_rect = pygame.Rect(x, y, BAR_LENGTH, BAR_HEIGHT)
+    fill_rect = pygame.Rect(x, y, fill, BAR_HEIGHT)
+    pygame.draw.rect(surf, RED, fill_rect)
+    pygame.draw.rect(surf, WHITE, outline_rect, 1)
+
+def draw_all_healths():
+    for sprite in all_sprites:
+        if isinstance(sprite, Enemy):
+            draw_enemy_health(screen, sprite.rect.x, sprite.rect.y - 10, sprite.health, 30 if not isinstance(sprite, Boss) else 100)
+
+# --- Game Over Screen ---
+def show_game_over_screen():
+    screen.fill(BLACK)
+    font_large = pygame.font.Font(None, 72)
+    text_game_over = font_large.render("Game Over", True, RED)
+    text_rect = text_game_over.get_rect(center=(screen_width // 2, screen_height // 3))
+    screen.blit(text_game_over, text_rect)
+
+    text_restart = font.render("Press SPACE to Restart", True, WHITE)
+    text_rect = text_restart.get_rect(center=(screen_width // 2, screen_height // 2))
+    screen.blit(text_restart, text_rect)
+
+    pygame.display.flip()
+
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    reset_game()
+                    waiting = False
+
+# --- Reset Game Function ---
+def reset_game():
+    global score, current_level, game_over, player
+    score = 0
+    current_level = 1
+    game_over = False
+    load_level(current_level)
+    player.health = 100
+    player.lives = 3
+
+# --- Game Loop ---
+running = True
+game_over = False
+score = 0
+current_level = 1
+load_level(current_level)
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    if not game_over:
+        # --- Update ---
+        all_sprites.update()
+
+        # --- Collision Detection ---
+        check_collisions()
+
+        # --- Level Progression ---
+        if len(enemies) == 0:
+            current_level += 1
+            if current_level > 3:
+                print("You Win!")
+                running = False
+            else:
+                load_level(current_level)
+
+        # --- Draw ---
+        screen.fill(BLACK)
+        all_sprites.draw(screen)
+        draw_hud()
+        draw_all_healths()
+        pygame.display.flip()
+        pygame.time.delay(30)
+    else:
+        show_game_over_screen()
+
+pygame.quit()
